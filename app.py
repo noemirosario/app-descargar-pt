@@ -4,29 +4,12 @@ import json
 import base64
 import time
 import streamlit as st
+import zipfile
+from io import BytesIO
 
-# Directorio de descargas (se puede usar temporalmente en Render)
+# Directorio temporal de archivos
 DIRECTORIO = "archivos_descargados"
 os.makedirs(DIRECTORIO, exist_ok=True)
-
-# Renombrar archivos PDF en el directorio
-def renombrar_archivos():
-    archivos = os.listdir(DIRECTORIO)
-    nuevos_nombres = []
-    for archivo in archivos:
-        if archivo.endswith('.pdf'):
-            partes = archivo.split('_')
-            if len(partes) >= 2:
-                nuevo_nombre = f'{partes[0]}_{partes[1]}.pdf'
-                ruta_vieja = os.path.join(DIRECTORIO, archivo)
-                ruta_nueva = os.path.join(DIRECTORIO, nuevo_nombre)
-                os.rename(ruta_vieja, ruta_nueva)
-                st.success(f"Renombrado: {archivo} -> {nuevo_nombre}")
-                nuevos_nombres.append(nuevo_nombre)
-            else:
-                nuevos_nombres.append(archivo)
-    st.info("✅ Renombrado completo.")
-    return nuevos_nombres
 
 # Descargar archivos PDF desde la URL base
 def descargar_pdfs(file_names):
@@ -45,10 +28,9 @@ def descargar_pdfs(file_names):
             file_path = os.path.join(DIRECTORIO, f"{file_name}.pdf")
             with open(file_path, "wb") as file:
                 file.write(response.content)
-            # Verificar tamaño del archivo
-            if os.path.getsize(file_path) <= 1024:  # 1 KB o menos
-                st.error(f"❌ No pudimos descargar el plan: {file_name} (verifica el nombre del archivo)")
-                os.remove(file_path)  # Opcional: borrar archivo inválido
+            if os.path.getsize(file_path) <= 1024:
+                st.error(f"❌ No se pudo descargar: {file_name} (verifica el nombre)")
+                os.remove(file_path)
             else:
                 st.success(f"✅ PDF descargado: {file_name}.pdf")
                 archivos_descargados.append(file_path)
@@ -57,27 +39,35 @@ def descargar_pdfs(file_names):
         time.sleep(1.5)
     return archivos_descargados
 
-# Interfaz Streamlit
-st.title("📥 Descarga masiva de Planes De Trabajo")
+# Crear archivo ZIP con los PDFs
+def crear_zip(archivos):
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zipf:
+        for archivo in archivos:
+            nombre = os.path.basename(archivo)
+            zipf.write(archivo, arcname=nombre)
+    buffer.seek(0)
+    return buffer
 
-nombres_input = st.text_area("Ingresa los nombres de los archivos (uno por línea):")
-if st.button("Descargar PDFs"):
+# Interfaz Streamlit
+st.title("📥 Descarga MASIVA de Planes de Trabajo")
+
+nombres_input = st.text_area("🔤 Ingresa los nombres de los archivos (uno por línea):")
+
+if st.button("⬇️ Descargar todos"):
     if nombres_input.strip():
         nombres_lista = [line.strip() for line in nombres_input.strip().splitlines() if line.strip()]
-        archivos_descargados = descargar_pdfs(nombres_lista)
-        nuevos_nombres = renombrar_archivos()
+        archivos = descargar_pdfs(nombres_lista)
 
-        # Mostrar botones para descargar los PDFs desde la app
-        st.header("Descarga tus archivos PDF:")
-        for archivo in nuevos_nombres:
-            file_path = os.path.join(DIRECTORIO, archivo)
-            if os.path.exists(file_path):
-                with open(file_path, "rb") as f:
-                    st.download_button(
-                        label=f"Descargar {archivo}",
-                        data=f,
-                        file_name=archivo,
-                        mime="application/pdf"
-                    )
+        if archivos:
+            zip_buffer = crear_zip(archivos)
+            st.download_button(
+                label="📦 Descargar ZIP con todos los PDFs",
+                data=zip_buffer,
+                file_name="planes_trabajo.zip",
+                mime="application/zip"
+            )
+        else:
+            st.warning("⚠️ No hay archivos válidos para comprimir.")
     else:
         st.warning("⚠️ Por favor, ingresa al menos un nombre de archivo.")
