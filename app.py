@@ -12,6 +12,7 @@ os.makedirs(DIRECTORIO, exist_ok=True)
 # Renombrar archivos PDF en el directorio
 def renombrar_archivos():
     archivos = os.listdir(DIRECTORIO)
+    nuevos_nombres = []
     for archivo in archivos:
         if archivo.endswith('.pdf'):
             partes = archivo.split('_')
@@ -21,11 +22,16 @@ def renombrar_archivos():
                 ruta_nueva = os.path.join(DIRECTORIO, nuevo_nombre)
                 os.rename(ruta_vieja, ruta_nueva)
                 st.success(f"Renombrado: {archivo} -> {nuevo_nombre}")
+                nuevos_nombres.append(nuevo_nombre)
+            else:
+                nuevos_nombres.append(archivo)
     st.info("✅ Renombrado completo.")
+    return nuevos_nombres
 
 # Descargar archivos PDF desde la URL base
 def descargar_pdfs(file_names):
     BASE_URL = "http://odc.portalweb.priceshoes.com/fsw/pdgn/repo/getPtPDF?encodedData="
+    archivos_descargados = []
     for file_name in file_names:
         data = {
             "nombreArchivo": f"{file_name}.pdf",
@@ -45,9 +51,11 @@ def descargar_pdfs(file_names):
                 os.remove(file_path)  # Opcional: borrar archivo inválido
             else:
                 st.success(f"✅ PDF descargado: {file_name}.pdf")
+                archivos_descargados.append(file_path)
         else:
             st.error(f"❌ Error al descargar {file_name}: {response.status_code}")
         time.sleep(1.5)
+    return archivos_descargados
 
 # Interfaz Streamlit
 st.title("📥 Descarga masiva de Planes De Trabajo")
@@ -56,7 +64,20 @@ nombres_input = st.text_area("Ingresa los nombres de los archivos (uno por líne
 if st.button("Descargar PDFs"):
     if nombres_input.strip():
         nombres_lista = [line.strip() for line in nombres_input.strip().splitlines() if line.strip()]
-        descargar_pdfs(nombres_lista)
-        renombrar_archivos()
+        archivos_descargados = descargar_pdfs(nombres_lista)
+        nuevos_nombres = renombrar_archivos()
+
+        # Mostrar botones para descargar los PDFs desde la app
+        st.header("Descarga tus archivos PDF:")
+        for archivo in nuevos_nombres:
+            file_path = os.path.join(DIRECTORIO, archivo)
+            if os.path.exists(file_path):
+                with open(file_path, "rb") as f:
+                    st.download_button(
+                        label=f"Descargar {archivo}",
+                        data=f,
+                        file_name=archivo,
+                        mime="application/pdf"
+                    )
     else:
         st.warning("⚠️ Por favor, ingresa al menos un nombre de archivo.")
